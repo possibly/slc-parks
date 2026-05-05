@@ -25,3 +25,6 @@ GitHub Actions runs the scraper weekly and commits `parks.csv` if it changed.
 `index.html` is a no-build GitHub Pages front end for `parks.csv`. It loads the
 CSV in the browser and adds search, city/rating filters, amenity filters, and a
 CSV download link.
+
+Pages is deployed by `.github/workflows/pages.yml` on every push to `main`.
+Configure the repository's Pages source to **GitHub Actions**.
