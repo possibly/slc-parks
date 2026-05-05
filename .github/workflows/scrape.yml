@@ -1,0 +1,37 @@
+name: Scrape SLC parks CSV
+
+on:
+  workflow_dispatch:
+  schedule:
+    # Run once a week, Monday at 14:17 UTC.
+    - cron: '17 14 * * 1'
+
+permissions:
+  contents: write
+
+jobs:
+  scrape:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.x'
+
+      - name: Scrape latest CSV
+        run: python scrape_slc_parks.py
+
+      - name: Commit and push if CSV changed
+        run: |
+          git config user.name "Automated SLC parks scraper"
+          git config user.email "actions@users.noreply.github.com"
+          git add parks.csv scrape_slc_parks.py
+          if git diff --cached --quiet; then
+            echo "No changes to commit"
+          else
+            git commit -m "Update SLC parks CSV"
+            git push
+          fi
