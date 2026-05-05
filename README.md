@@ -19,3 +19,9 @@ python scrape_slc_parks.py
 ```
 
 GitHub Actions runs the scraper weekly and commits `parks.csv` if it changed.
+
+## GitHub Pages
+
+`index.html` is a no-build GitHub Pages front end for `parks.csv`. It loads the
+CSV in the browser and adds search, city/rating filters, amenity filters, and a
+CSV download link.
