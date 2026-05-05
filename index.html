@@ -29,6 +29,13 @@
     tr:hover td { background: color-mix(in srgb, var(--accent) 8%, transparent); }
     .yes { color: #117a38; font-weight: 700; }
     .rating { white-space: nowrap; }
+    .note-button[disabled] { opacity: .45; cursor: not-allowed; }
+    .modal { border: 0; border-radius: 1rem; box-shadow: 0 1rem 3rem rgb(0 0 0 / .35); max-width: min(680px, calc(100vw - 2rem)); width: 100%; }
+    .modal::backdrop { background: rgb(0 0 0 / .55); }
+    .modal header { background: none; color: CanvasText; padding: 0; }
+    .modal h2 { margin-top: 0; }
+    .modal-body { white-space: pre-wrap; max-height: 60vh; overflow: auto; }
+    .modal-actions { display: flex; justify-content: end; margin-top: 1rem; }
     footer { margin: 2rem 0; }
   </style>
 </head>
@@ -80,12 +87,22 @@
     </footer>
   </main>
 
+  <dialog id="note-modal" class="modal">
+    <header>
+      <h2 id="note-title">Park note</h2>
+    </header>
+    <div id="note-body" class="modal-body"></div>
+    <div class="modal-actions">
+      <button id="note-close" type="button">Close</button>
+    </div>
+  </dialog>
+
   <script>
     const visibleColumns = [
       'Park Name', 'City', 'City Cast Rating', 'Bathrooms', 'Kid Play Area',
       'Toddler Friendly Play Area', 'Off Leash Dog Area', 'Splash Pad',
       'Basketball Court', 'Tennis Courts', 'Pickleball Courts', 'Picnic Tables',
-      'Lighting After Dark', 'Additional Notes', 'Location'
+      'Lighting After Dark', 'Location', 'Note'
     ];
     const amenityColumns = [
       'Bathrooms', 'Pool', 'Pond', 'Grills', 'Pavillion', 'Gardens',
@@ -103,7 +120,9 @@
       city: document.querySelector('#city'), rating: document.querySelector('#rating'),
       amenity: document.querySelector('#amenity'), reset: document.querySelector('#reset'),
       status: document.querySelector('#status'), head: document.querySelector('#head'),
-      body: document.querySelector('#body')
+      body: document.querySelector('#body'), noteModal: document.querySelector('#note-modal'),
+      noteTitle: document.querySelector('#note-title'), noteBody: document.querySelector('#note-body'),
+      noteClose: document.querySelector('#note-close')
     };
     let parks = [];
 
@@ -146,10 +165,26 @@
       }));
     }
 
+    function openNote(park) {
+      els.noteTitle.textContent = `${park['Park Name'] || 'Park'} note`;
+      els.noteBody.textContent = park['Additional Notes'] || 'No note available.';
+      if (typeof els.noteModal.showModal === 'function') els.noteModal.showModal();
+      else alert(els.noteBody.textContent);
+    }
+
     function cell(column, park) {
       const td = document.createElement('td');
       const value = park[column] || '';
-      if (column === 'Location' && value) {
+      if (column === 'Note') {
+        const note = park['Additional Notes'] || '';
+        const button = document.createElement('button');
+        button.type = 'button';
+        button.className = 'note-button';
+        button.textContent = note.trim() ? 'View Note' : 'No Note';
+        button.disabled = !note.trim();
+        button.addEventListener('click', () => openNote(park));
+        td.append(button);
+      } else if (column === 'Location' && value) {
         const a = document.createElement('a');
         a.href = value;
         a.textContent = 'Map';
@@ -205,6 +240,10 @@
 
     for (const el of [els.search, els.city, els.rating, els.amenity]) el.addEventListener('input', render);
     els.reset.addEventListener('click', () => { els.search.value = els.city.value = els.rating.value = els.amenity.value = ''; render(); });
+    els.noteClose.addEventListener('click', () => els.noteModal.close());
+    els.noteModal.addEventListener('click', event => {
+      if (event.target === els.noteModal) els.noteModal.close();
+    });
     init().catch(error => { els.status.textContent = error.message; console.error(error); });
   </script>
 </body>
