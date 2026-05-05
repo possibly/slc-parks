@@ -4,6 +4,7 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>SLC Parks CSV</title>
+  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" integrity="sha256-p4NxAoJBhIINfQnq7fxJd6/Z9sCvrYsx1l6R4bM2C8Y=" crossorigin="">
   <style>
     :root { color-scheme: light dark; --accent: #2f7d5f; --muted: #666; }
     body { font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; margin: 0; line-height: 1.45; }
@@ -22,6 +23,10 @@
     input, select { font: inherit; padding: .5rem; min-width: 12rem; border: 1px solid #aaa; border-radius: .4rem; }
     button, .download { display: inline-block; font: inherit; padding: .55rem .8rem; border: 0; border-radius: .4rem; background: var(--accent); color: white; text-decoration: none; cursor: pointer; }
     .muted { color: var(--muted); }
+    .map-wrap { border: 1px solid color-mix(in srgb, currentColor 20%, transparent); border-radius: .75rem; overflow: hidden; margin: 1rem 0; }
+    #map { height: min(65vh, 620px); min-height: 360px; background: #dfe9df; }
+    .leaflet-popup-content h3 { margin: 0 0 .35rem; }
+    .leaflet-popup-content p { margin: .25rem 0; }
     .table-wrap { overflow: auto; border: 1px solid color-mix(in srgb, currentColor 20%, transparent); border-radius: .75rem; }
     table { border-collapse: collapse; width: 100%; min-width: 900px; }
     th, td { padding: .55rem .7rem; border-bottom: 1px solid color-mix(in srgb, currentColor 15%, transparent); text-align: left; vertical-align: top; }
@@ -75,6 +80,9 @@
     </section>
 
     <p id="status" class="muted">Loading parks.csv…</p>
+    <section class="map-wrap" aria-label="Filtered park locations">
+      <div id="map"></div>
+    </section>
     <div class="table-wrap">
       <table>
         <thead><tr id="head"></tr></thead>
@@ -97,6 +105,7 @@
     </div>
   </dialog>
 
+  <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js" integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo=" crossorigin=""></script>
   <script>
     const visibleColumns = [
       'Park Name', 'City', 'City Cast Rating', 'Bathrooms', 'Kid Play Area',
@@ -120,11 +129,15 @@
       city: document.querySelector('#city'), rating: document.querySelector('#rating'),
       amenity: document.querySelector('#amenity'), reset: document.querySelector('#reset'),
       status: document.querySelector('#status'), head: document.querySelector('#head'),
-      body: document.querySelector('#body'), noteModal: document.querySelector('#note-modal'),
+      body: document.querySelector('#body'), map: document.querySelector('#map'),
+      noteModal: document.querySelector('#note-modal'),
       noteTitle: document.querySelector('#note-title'), noteBody: document.querySelector('#note-body'),
       noteClose: document.querySelector('#note-close')
     };
     let parks = [];
+    let map;
+    let markerLayer;
+    let hasFitInitialBounds = false;
 
     function parseCsv(text) {
       const rows = [];
@@ -148,6 +161,14 @@
     function uniq(values) { return [...new Set(values.filter(Boolean))].sort((a, b) => a.localeCompare(b)); }
     function isYes(value) { return String(value || '').trim().toLowerCase() === 'yes'; }
     function stars(value) { const n = Number(value); return Number.isFinite(n) ? '★'.repeat(n) + '☆'.repeat(Math.max(0, 5 - n)) : value; }
+    function escapeHtml(value) {
+      return String(value || '').replace(/[&<>'"]/g, char => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', "'": '&#39;', '"': '&quot;' }[char]));
+    }
+    function coordinates(park) {
+      const lat = Number(park.latitude);
+      const lon = Number(park.longitude);
+      return Number.isFinite(lat) && Number.isFinite(lon) ? [lat, lon] : null;
+    }
 
     function fillSelect(select, values) {
       for (const value of values) {
@@ -170,6 +191,42 @@
       els.noteBody.textContent = park['Additional Notes'] || 'No note available.';
       if (typeof els.noteModal.showModal === 'function') els.noteModal.showModal();
       else alert(els.noteBody.textContent);
+    }
+
+    function initMap() {
+      map = L.map(els.map, { scrollWheelZoom: false }).setView([40.68, -111.9], 10);
+      L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+        maxZoom: 19,
+        attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
+      }).addTo(map);
+      markerLayer = L.layerGroup().addTo(map);
+    }
+
+    function popupHtml(park, index) {
+      const note = park['Additional Notes'] || '';
+      return `
+        <h3>${escapeHtml(park['Park Name'])}</h3>
+        <p>${escapeHtml(park.City)}${park['City Cast Rating'] ? ` · ${escapeHtml(park['City Cast Rating'])} stars` : ''}</p>
+        ${park.Location ? `<p><a href="${escapeHtml(park.Location)}">Open directions</a></p>` : ''}
+        ${note.trim() ? `<p><button type="button" class="popup-note" data-park-index="${index}">View Note</button></p>` : ''}
+      `;
+    }
+
+    function renderMap(rows) {
+      if (!map) initMap();
+      markerLayer.clearLayers();
+      const bounds = [];
+      rows.forEach(park => {
+        const coords = coordinates(park);
+        if (!coords) return;
+        bounds.push(coords);
+        L.marker(coords).bindPopup(popupHtml(park, parks.indexOf(park))).addTo(markerLayer);
+      });
+      if (bounds.length) {
+        const leafletBounds = L.latLngBounds(bounds);
+        map.fitBounds(leafletBounds, { padding: [24, 24], maxZoom: hasFitInitialBounds ? 14 : 12 });
+        hasFitInitialBounds = true;
+      }
     }
 
     function cell(column, park) {
@@ -217,6 +274,7 @@
     function render() {
       const rows = filteredParks();
       els.shown.textContent = rows.length.toLocaleString();
+      renderMap(rows);
       els.body.replaceChildren(...rows.map(park => {
         const tr = document.createElement('tr');
         tr.append(...visibleColumns.map(column => cell(column, park)));
@@ -243,6 +301,12 @@
     els.noteClose.addEventListener('click', () => els.noteModal.close());
     els.noteModal.addEventListener('click', event => {
       if (event.target === els.noteModal) els.noteModal.close();
+    });
+    els.map.addEventListener('click', event => {
+      const button = event.target.closest('.popup-note');
+      if (!button) return;
+      const park = parks[Number(button.dataset.parkIndex)];
+      if (park) openNote(park);
     });
     init().catch(error => { els.status.textContent = error.message; console.error(error); });
   </script>
