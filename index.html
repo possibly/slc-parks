@@ -48,6 +48,13 @@
     .modal-body { white-space: pre-wrap; max-height: 60vh; overflow: auto; }
     .modal-actions { display: flex; justify-content: end; margin-top: 1rem; }
     footer { margin: 2rem 0; }
+    .chart-section { margin: 1rem 0; }
+    .chart-section h2 { margin: 0 0 .5rem; font-size: 1.2rem; }
+    .chart-controls { display: flex; flex-wrap: wrap; gap: .5rem; align-items: center; margin-bottom: .75rem; }
+    .chart-controls label { font-weight: 600; display: flex; align-items: center; gap: .4rem; }
+    .chart-controls select { min-width: 10rem; }
+    .chart-wrap { border: 1px solid color-mix(in srgb, currentColor 20%, transparent); border-radius: .75rem; overflow: hidden; background: Canvas; }
+    #history-chart { display: block; width: 100%; height: 320px; }
   </style>
 </head>
 <body>
@@ -95,6 +102,21 @@
         <tbody id="body"></tbody>
       </table>
     </div>
+
+    <section class="chart-section">
+      <h2>Park &amp; Amenity History</h2>
+      <div class="chart-controls">
+        <label>Show
+          <select id="chart-metric">
+            <option value="parks">Total parks</option>
+          </select>
+        </label>
+      </div>
+      <div class="chart-wrap">
+        <canvas id="history-chart" aria-label="Park and amenity history chart"></canvas>
+      </div>
+      <p class="muted" style="font-size:.85rem">Updated weekly by the scraper workflow. Each point is one weekly snapshot.</p>
+    </section>
 
     <footer class="muted">
       Source: <a href="https://saltlake.citycast.fm/parks">Every Park SLC</a>. Method inspired by Simon Willison’s <a href="https://simonwillison.net/2020/Oct/9/git-scraping/">git scraping</a> pattern.
@@ -314,6 +336,150 @@
       if (event.target === els.noteModal) els.noteModal.close();
     });
     init().catch(error => { els.status.textContent = error.message; console.error(error); });
+
+    // --- History chart ---
+    const chartCanvas = document.querySelector('#history-chart');
+    const chartMetric = document.querySelector('#chart-metric');
+    let historyData = [];
+
+    function drawChart(data, metric) {
+      const canvas = chartCanvas;
+      const dpr = window.devicePixelRatio || 1;
+      const rect = canvas.getBoundingClientRect();
+      canvas.width = rect.width * dpr;
+      canvas.height = rect.height * dpr;
+      const ctx = canvas.getContext('2d');
+      ctx.scale(dpr, dpr);
+      const W = rect.width, H = rect.height;
+      const pad = { top: 24, right: 24, bottom: 48, left: 56 };
+
+      const values = data.map(d => metric === 'parks' ? d.parks : (d.amenities[metric] || 0));
+      const minVal = 0;
+      const maxVal = Math.max(...values, 1);
+      const chartW = W - pad.left - pad.right;
+      const chartH = H - pad.top - pad.bottom;
+
+      // Background
+      ctx.clearRect(0, 0, W, H);
+
+      // Grid lines & Y labels
+      const accent = '#2f7d5f';
+      const muted = getComputedStyle(document.documentElement).getPropertyValue('color') || '#333';
+      ctx.strokeStyle = 'color-mix(in srgb, currentColor 12%, transparent)';
+      ctx.fillStyle = muted;
+      ctx.font = `${12 * Math.min(1, W / 600)}px system-ui, sans-serif`;
+      ctx.textAlign = 'right';
+      ctx.textBaseline = 'middle';
+      const gridLines = 5;
+      for (let i = 0; i <= gridLines; i++) {
+        const y = pad.top + chartH - (i / gridLines) * chartH;
+        const val = Math.round(minVal + (i / gridLines) * (maxVal - minVal));
+        ctx.beginPath();
+        ctx.setLineDash([4, 4]);
+        ctx.strokeStyle = `rgba(128,128,128,0.2)`;
+        ctx.moveTo(pad.left, y);
+        ctx.lineTo(pad.left + chartW, y);
+        ctx.stroke();
+        ctx.setLineDash([]);
+        ctx.fillStyle = muted;
+        ctx.fillText(val.toLocaleString(), pad.left - 8, y);
+      }
+
+      if (data.length === 0) return;
+
+      // X labels (dates) — show up to 8 evenly spaced
+      ctx.textAlign = 'center';
+      ctx.textBaseline = 'top';
+      const step = Math.max(1, Math.floor(data.length / 8));
+      for (let i = 0; i < data.length; i += step) {
+        const x = pad.left + (i / Math.max(data.length - 1, 1)) * chartW;
+        ctx.fillStyle = `rgba(128,128,128,0.8)`;
+        ctx.fillText(data[i].date.slice(5), x, pad.top + chartH + 8); // MM-DD
+      }
+      // Always label last point
+      if ((data.length - 1) % step !== 0) {
+        const x = pad.left + chartW;
+        ctx.fillText(data[data.length - 1].date.slice(5), x, pad.top + chartH + 8);
+      }
+
+      // Line
+      ctx.beginPath();
+      ctx.strokeStyle = accent;
+      ctx.lineWidth = 2.5;
+      ctx.lineJoin = 'round';
+      data.forEach((d, i) => {
+        const x = pad.left + (i / Math.max(data.length - 1, 1)) * chartW;
+        const y = pad.top + chartH - ((values[i] - minVal) / (maxVal - minVal)) * chartH;
+        i === 0 ? ctx.moveTo(x, y) : ctx.lineTo(x, y);
+      });
+      ctx.stroke();
+
+      // Area fill
+      ctx.beginPath();
+      data.forEach((d, i) => {
+        const x = pad.left + (i / Math.max(data.length - 1, 1)) * chartW;
+        const y = pad.top + chartH - ((values[i] - minVal) / (maxVal - minVal)) * chartH;
+        i === 0 ? ctx.moveTo(x, y) : ctx.lineTo(x, y);
+      });
+      ctx.lineTo(pad.left + chartW, pad.top + chartH);
+      ctx.lineTo(pad.left, pad.top + chartH);
+      ctx.closePath();
+      ctx.fillStyle = `rgba(47,125,95,0.12)`;
+      ctx.fill();
+
+      // Dots
+      data.forEach((d, i) => {
+        const x = pad.left + (i / Math.max(data.length - 1, 1)) * chartW;
+        const y = pad.top + chartH - ((values[i] - minVal) / (maxVal - minVal)) * chartH;
+        ctx.beginPath();
+        ctx.arc(x, y, 4, 0, Math.PI * 2);
+        ctx.fillStyle = accent;
+        ctx.fill();
+        ctx.strokeStyle = 'Canvas';
+        ctx.lineWidth = 1.5;
+        ctx.stroke();
+      });
+
+      // Value label on last dot
+      if (data.length > 0) {
+        const i = data.length - 1;
+        const x = pad.left + chartW;
+        const y = pad.top + chartH - ((values[i] - minVal) / (maxVal - minVal)) * chartH;
+        ctx.textAlign = 'right';
+        ctx.textBaseline = 'bottom';
+        ctx.fillStyle = accent;
+        ctx.font = `bold ${12 * Math.min(1, W / 600)}px system-ui, sans-serif`;
+        ctx.fillText(values[i].toLocaleString(), x, y - 6);
+      }
+    }
+
+    function renderChart() {
+      if (historyData.length) drawChart(historyData, chartMetric.value);
+    }
+
+    async function initChart() {
+      try {
+        const res = await fetch('history.json', { cache: 'no-cache' });
+        if (!res.ok) return;
+        historyData = await res.json();
+        // Populate metric selector with amenity options
+        const allAmenities = new Set();
+        historyData.forEach(d => Object.keys(d.amenities || {}).forEach(k => allAmenities.add(k)));
+        for (const amenity of [...allAmenities].sort()) {
+          const opt = document.createElement('option');
+          opt.value = amenity;
+          opt.textContent = amenity;
+          chartMetric.append(opt);
+        }
+        renderChart();
+      } catch (e) {
+        console.warn('Could not load history.json', e);
+      }
+    }
+
+    chartMetric.addEventListener('change', renderChart);
+    window.addEventListener('resize', renderChart);
+    initChart();
   </script>
 </body>
 </html>

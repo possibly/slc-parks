@@ -1,0 +1,35 @@
+[
+  {
+    "date": "2026-05-05",
+    "commit": "1ace8677",
+    "parks": 489,
+    "amenities": {
+      "Bathrooms": 161,
+      "Pool": 12,
+      "Pond": 22,
+      "Grills": 77,
+      "Pavillion": 259,
+      "Gardens": 47,
+      "Baseball Diamond": 60,
+      "Softball Diamond": 22,
+      "Toddler Friendly Play Area": 159,
+      "Kid Play Area": 362,
+      "Off Leash Dog Area": 28,
+      "Water Fountain": 228,
+      "Splash Pad": 21,
+      "Skate Park": 19,
+      "Basketball Court": 102,
+      "Disc Golf": 10,
+      "Beach Volleyball Court": 45,
+      "Volleyball Court": 14,
+      "Soccer Field": 54,
+      "River or Stream": 72,
+      "Tennis Courts": 62,
+      "Pickleball Courts": 41,
+      "Fitness Area": 13,
+      "Futsal Court": 5,
+      "Lighting After Dark": 177,
+      "Picnic Tables": 343
+    }
+  }
+]
