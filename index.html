@@ -72,6 +72,21 @@
       <div class="stat"><strong id="cities">—</strong> cities</div>
     </section>
 
+    <section class="chart-section">
+      <h2>Park &amp; Amenity History</h2>
+      <div class="chart-controls">
+        <label>Show
+          <select id="chart-metric">
+            <option value="parks">Total parks</option>
+          </select>
+        </label>
+      </div>
+      <div class="chart-wrap">
+        <canvas id="history-chart" aria-label="Park and amenity history chart"></canvas>
+      </div>
+      <p class="muted" style="font-size:.85rem">Updated weekly by the scraper workflow. Each point is one weekly snapshot.</p>
+    </section>
+
     <section class="panel">
       <div class="filters">
         <label>Search
@@ -96,27 +111,13 @@
     <section class="map-wrap" aria-label="Filtered park locations">
       <div id="map"></div>
     </section>
+
     <div class="table-wrap">
       <table>
         <thead><tr id="head"></tr></thead>
         <tbody id="body"></tbody>
       </table>
     </div>
-
-    <section class="chart-section">
-      <h2>Park &amp; Amenity History</h2>
-      <div class="chart-controls">
-        <label>Show
-          <select id="chart-metric">
-            <option value="parks">Total parks</option>
-          </select>
-        </label>
-      </div>
-      <div class="chart-wrap">
-        <canvas id="history-chart" aria-label="Park and amenity history chart"></canvas>
-      </div>
-      <p class="muted" style="font-size:.85rem">Updated weekly by the scraper workflow. Each point is one weekly snapshot.</p>
-    </section>
 
     <footer class="muted">
       Source: <a href="https://saltlake.citycast.fm/parks">Every Park SLC</a>. Method inspired by Simon Willison’s <a href="https://simonwillison.net/2020/Oct/9/git-scraping/">git scraping</a> pattern.
@@ -358,6 +359,9 @@
       const maxVal = Math.max(...values, 1);
       const chartW = W - pad.left - pad.right;
       const chartH = H - pad.top - pad.bottom;
+      // For a single data point, duplicate it so we draw a flat line across the chart
+      const plotData = data.length === 1 ? [data[0], data[0]] : data;
+      const plotValues = values.length === 1 ? [values[0], values[0]] : values;
 
       // Background
       ctx.clearRect(0, 0, W, H);
@@ -385,21 +389,24 @@
         ctx.fillText(val.toLocaleString(), pad.left - 8, y);
       }
 
-      if (data.length === 0) return;
+      if (plotData.length === 0) return;
 
-      // X labels (dates) — show up to 8 evenly spaced
+      // X labels (dates) — show up to 8 evenly spaced; for single point just label centre
       ctx.textAlign = 'center';
       ctx.textBaseline = 'top';
-      const step = Math.max(1, Math.floor(data.length / 8));
-      for (let i = 0; i < data.length; i += step) {
-        const x = pad.left + (i / Math.max(data.length - 1, 1)) * chartW;
+      if (data.length === 1) {
         ctx.fillStyle = `rgba(128,128,128,0.8)`;
-        ctx.fillText(data[i].date.slice(5), x, pad.top + chartH + 8); // MM-DD
-      }
-      // Always label last point
-      if ((data.length - 1) % step !== 0) {
-        const x = pad.left + chartW;
-        ctx.fillText(data[data.length - 1].date.slice(5), x, pad.top + chartH + 8);
+        ctx.fillText(data[0].date, pad.left + chartW / 2, pad.top + chartH + 8);
+      } else {
+        const step = Math.max(1, Math.floor(plotData.length / 8));
+        for (let i = 0; i < plotData.length; i += step) {
+          const x = pad.left + (i / Math.max(plotData.length - 1, 1)) * chartW;
+          ctx.fillStyle = `rgba(128,128,128,0.8)`;
+          ctx.fillText(plotData[i].date.slice(5), x, pad.top + chartH + 8);
+        }
+        if ((plotData.length - 1) % step !== 0) {
+          ctx.fillText(plotData[plotData.length - 1].date.slice(5), pad.left + chartW, pad.top + chartH + 8);
+        }
       }
 
       // Line
@@ -407,18 +414,18 @@
       ctx.strokeStyle = accent;
       ctx.lineWidth = 2.5;
       ctx.lineJoin = 'round';
-      data.forEach((d, i) => {
-        const x = pad.left + (i / Math.max(data.length - 1, 1)) * chartW;
-        const y = pad.top + chartH - ((values[i] - minVal) / (maxVal - minVal)) * chartH;
+      plotData.forEach((d, i) => {
+        const x = pad.left + (i / Math.max(plotData.length - 1, 1)) * chartW;
+        const y = pad.top + chartH - ((plotValues[i] - minVal) / (maxVal - minVal)) * chartH;
         i === 0 ? ctx.moveTo(x, y) : ctx.lineTo(x, y);
       });
       ctx.stroke();
 
       // Area fill
       ctx.beginPath();
-      data.forEach((d, i) => {
-        const x = pad.left + (i / Math.max(data.length - 1, 1)) * chartW;
-        const y = pad.top + chartH - ((values[i] - minVal) / (maxVal - minVal)) * chartH;
+      plotData.forEach((d, i) => {
+        const x = pad.left + (i / Math.max(plotData.length - 1, 1)) * chartW;
+        const y = pad.top + chartH - ((plotValues[i] - minVal) / (maxVal - minVal)) * chartH;
         i === 0 ? ctx.moveTo(x, y) : ctx.lineTo(x, y);
       });
       ctx.lineTo(pad.left + chartW, pad.top + chartH);
@@ -427,12 +434,13 @@
       ctx.fillStyle = `rgba(47,125,95,0.12)`;
       ctx.fill();
 
-      // Dots
+      // Dots — only for real data points (not the duplicated single point)
       data.forEach((d, i) => {
-        const x = pad.left + (i / Math.max(data.length - 1, 1)) * chartW;
+        const plotI = data.length === 1 ? 0 : i;
+        const x = pad.left + (plotI / Math.max(plotData.length - 1, 1)) * chartW;
         const y = pad.top + chartH - ((values[i] - minVal) / (maxVal - minVal)) * chartH;
         ctx.beginPath();
-        ctx.arc(x, y, 4, 0, Math.PI * 2);
+        ctx.arc(data.length === 1 ? pad.left + chartW / 2 : x, y, 4, 0, Math.PI * 2);
         ctx.fillStyle = accent;
         ctx.fill();
         ctx.strokeStyle = 'Canvas';
@@ -442,14 +450,13 @@
 
       // Value label on last dot
       if (data.length > 0) {
-        const i = data.length - 1;
-        const x = pad.left + chartW;
-        const y = pad.top + chartH - ((values[i] - minVal) / (maxVal - minVal)) * chartH;
-        ctx.textAlign = 'right';
+        const lastX = data.length === 1 ? pad.left + chartW / 2 : pad.left + chartW;
+        const lastY = pad.top + chartH - ((values[values.length - 1] - minVal) / (maxVal - minVal)) * chartH;
+        ctx.textAlign = data.length === 1 ? 'center' : 'right';
         ctx.textBaseline = 'bottom';
         ctx.fillStyle = accent;
         ctx.font = `bold ${12 * Math.min(1, W / 600)}px system-ui, sans-serif`;
-        ctx.fillText(values[i].toLocaleString(), x, y - 6);
+        ctx.fillText(values[values.length - 1].toLocaleString(), lastX, lastY - 6);
       }
     }
 
