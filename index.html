@@ -271,7 +271,7 @@
         const button = document.createElement('button');
         button.type = 'button';
         button.className = 'note-button';
-        button.textContent = note.trim() ? 'View Note' : 'No Note';
+        button.textContent = note.trim() ? 'Note' : 'No Note';
         button.disabled = !note.trim();
         button.addEventListener('click', () => openNote(park));
         td.append(button);
