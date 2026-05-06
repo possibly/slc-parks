@@ -27,6 +27,12 @@
     #map { height: min(65vh, 620px); min-height: 360px; background: #dfe9df; }
     .leaflet-popup-content h3 { margin: 0 0 .35rem; }
     .leaflet-popup-content p { margin: .25rem 0; }
+    .leaflet-popup-content { min-width: 180px; max-width: 280px; }
+    .amenity-list { display: flex; flex-wrap: wrap; gap: .3rem; margin: .4rem 0; padding: 0; list-style: none; }
+    .amenity-pill { background: color-mix(in srgb, #2f7d5f 15%, transparent); color: #184c3a; border: 1px solid color-mix(in srgb, #2f7d5f 30%, transparent); border-radius: 999px; padding: .15rem .55rem; font-size: .78rem; font-weight: 600; white-space: nowrap; }
+    .popup-note-section { margin-top: .5rem; padding-top: .5rem; border-top: 1px solid color-mix(in srgb, currentColor 15%, transparent); }
+    .popup-note-section strong { font-size: .8rem; text-transform: uppercase; letter-spacing: .04em; color: var(--muted); }
+    .popup-note-text { margin: .25rem 0 0; font-size: .85rem; max-height: 8rem; overflow-y: auto; white-space: pre-wrap; }
     .table-wrap { overflow: auto; border: 1px solid color-mix(in srgb, currentColor 20%, transparent); border-radius: .75rem; }
     table { border-collapse: collapse; width: 100%; min-width: 900px; }
     th, td { padding: .55rem .7rem; border-bottom: 1px solid color-mix(in srgb, currentColor 15%, transparent); text-align: left; vertical-align: top; }
@@ -204,11 +210,16 @@
 
     function popupHtml(park, index) {
       const note = park['Additional Notes'] || '';
+      const yesAmenities = amenityColumns.filter(col => isYes(park[col]));
+      const amenitiesHtml = yesAmenities.length
+        ? `<ul class="amenity-list">${yesAmenities.map(a => `<li class="amenity-pill">${escapeHtml(a)}</li>`).join('')}</ul>`
+        : '';
       return `
         <h3>${escapeHtml(park['Park Name'])}</h3>
         <p>${escapeHtml(park.City)}${park['City Cast Rating'] ? ` · ${escapeHtml(park['City Cast Rating'])} stars` : ''}</p>
+        ${amenitiesHtml}
         ${park.Location ? `<p><a href="${escapeHtml(park.Location)}">Open directions</a></p>` : ''}
-        ${note.trim() ? `<p><button type="button" class="popup-note" data-park-index="${index}">View Note</button></p>` : ''}
+        ${note.trim() ? `<div class="popup-note-section"><strong>Note</strong><p class="popup-note-text">${escapeHtml(note.trim())}</p></div>` : ''}
       `;
     }
 
@@ -301,12 +312,6 @@
     els.noteClose.addEventListener('click', () => els.noteModal.close());
     els.noteModal.addEventListener('click', event => {
       if (event.target === els.noteModal) els.noteModal.close();
-    });
-    els.map.addEventListener('click', event => {
-      const button = event.target.closest('.popup-note');
-      if (!button) return;
-      const park = parks[Number(button.dataset.parkIndex)];
-      if (park) openNote(park);
     });
     init().catch(error => { els.status.textContent = error.message; console.error(error); });
   </script>
